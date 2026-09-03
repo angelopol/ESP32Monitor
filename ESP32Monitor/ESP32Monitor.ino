@@ -23,8 +23,9 @@ const char *WIFI_PASS = "TU_PASSWORD";
 // Sin barra final. Ej: "https://mi-monitor.vercel.app"
 const char *SERVER_URL = "https://TU-APP.vercel.app";
 
-// Debe coincidir con DEVICE_TOKEN en las env vars de Vercel.
-const char *DEVICE_TOKEN = "cambia-esto-por-algo-largo-y-aleatorio";
+// Token del dispositivo. Se genera al crear el dispositivo en la app web
+// (boton "Conexion ESP32" de la tarjeta). Cada dispositivo tiene el suyo.
+const char *DEVICE_TOKEN = "pega-aca-el-token-del-dispositivo";
 
 const unsigned long PING_INTERVAL_MS = 5000;   // cada cuanto pinguear
 const unsigned long HTTP_TIMEOUT_MS = 4000;    // timeout por request

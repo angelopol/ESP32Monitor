@@ -1,19 +1,19 @@
 /**
- * Envio de Web Push (VAPID) y almacenamiento de suscripciones.
- * Las suscripciones se guardan como un unico JSON array en Redis.
+ * Web Push (VAPID). Suscripciones guardadas por usuario.
+ *
+ * Redis:  user:<uid>:subs  -> JSON array de PushSubscription
  */
 
 import webpush, { type PushSubscription } from "web-push";
 import { kv } from "./kv";
-import { KEYS, config, vapidConfigured } from "./config";
+import { config, vapidConfigured } from "./config";
 
 let vapidReady = false;
 
 function ensureVapid(): void {
   if (vapidReady) return;
-  if (!vapidConfigured()) {
+  if (!vapidConfigured())
     throw new Error("VAPID keys no configuradas (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY)");
-  }
   webpush.setVapidDetails(
     config.vapid.subject,
     config.vapid.publicKey,
@@ -22,8 +22,10 @@ function ensureVapid(): void {
   vapidReady = true;
 }
 
-export async function getSubscriptions(): Promise<PushSubscription[]> {
-  const raw = await kv.get(KEYS.subs);
+const subsKey = (uid: string) => `user:${uid}:subs`;
+
+export async function getUserSubs(uid: string): Promise<PushSubscription[]> {
+  const raw = await kv.get(subsKey(uid));
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
@@ -33,21 +35,30 @@ export async function getSubscriptions(): Promise<PushSubscription[]> {
   }
 }
 
-async function saveSubscriptions(subs: PushSubscription[]): Promise<void> {
-  await kv.set(KEYS.subs, JSON.stringify(subs));
+async function saveUserSubs(
+  uid: string,
+  subs: PushSubscription[],
+): Promise<void> {
+  await kv.set(subsKey(uid), JSON.stringify(subs));
 }
 
-export async function addSubscription(sub: PushSubscription): Promise<void> {
-  const subs = await getSubscriptions();
+export async function addUserSub(
+  uid: string,
+  sub: PushSubscription,
+): Promise<void> {
+  const subs = await getUserSubs(uid);
   if (subs.some((s) => s.endpoint === sub.endpoint)) return;
   subs.push(sub);
-  await saveSubscriptions(subs);
+  await saveUserSubs(uid, subs);
 }
 
-export async function removeSubscription(endpoint: string): Promise<void> {
-  const subs = await getSubscriptions();
+export async function removeUserSub(
+  uid: string,
+  endpoint: string,
+): Promise<void> {
+  const subs = await getUserSubs(uid);
   const next = subs.filter((s) => s.endpoint !== endpoint);
-  if (next.length !== subs.length) await saveSubscriptions(next);
+  if (next.length !== subs.length) await saveUserSubs(uid, next);
 }
 
 export interface PushPayload {
@@ -57,32 +68,42 @@ export interface PushPayload {
   data?: Record<string, unknown>;
 }
 
-export async function sendToAll(
+/** Envia la notificacion a todas las suscripciones de todos los usuarios dados. */
+export async function sendToUsers(
+  userIds: string[],
   payload: PushPayload,
-): Promise<{ sent: number; removed: number; total: number }> {
+): Promise<{ sent: number; removed: number }> {
   ensureVapid();
-  const subs = await getSubscriptions();
-  if (subs.length === 0) return { sent: 0, removed: 0, total: 0 };
-
   const body = JSON.stringify(payload);
-  const dead: string[] = [];
+  let sent = 0;
+  let removed = 0;
 
   await Promise.all(
-    subs.map(async (sub) => {
-      try {
-        await webpush.sendNotification(sub, body, { TTL: 60 });
-      } catch (err) {
-        const code = (err as { statusCode?: number }).statusCode;
-        // 404 / 410 => la suscripcion ya no existe: la limpiamos.
-        if (code === 404 || code === 410) dead.push(sub.endpoint);
-        else console.error("[push] error enviando notificacion:", code, err);
+    Array.from(new Set(userIds)).map(async (uid) => {
+      const subs = await getUserSubs(uid);
+      if (subs.length === 0) return;
+      const dead: string[] = [];
+      await Promise.all(
+        subs.map(async (sub) => {
+          try {
+            await webpush.sendNotification(sub, body, { TTL: 60 });
+            sent++;
+          } catch (err) {
+            const code = (err as { statusCode?: number }).statusCode;
+            if (code === 404 || code === 410) dead.push(sub.endpoint);
+            else console.error("[push] error:", code, err);
+          }
+        }),
+      );
+      if (dead.length) {
+        removed += dead.length;
+        await saveUserSubs(
+          uid,
+          subs.filter((s) => !dead.includes(s.endpoint)),
+        );
       }
     }),
   );
 
-  if (dead.length > 0) {
-    await saveSubscriptions(subs.filter((s) => !dead.includes(s.endpoint)));
-  }
-
-  return { sent: subs.length - dead.length, removed: dead.length, total: subs.length };
+  return { sent, removed };
 }

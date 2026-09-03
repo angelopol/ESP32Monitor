@@ -1,108 +1,39 @@
 /**
- * Maquina de estados de "hay luz / no hay luz".
+ * Evaluacion de transicion "hay luz / no hay luz" por dispositivo, y disparo
+ * de notificaciones push a todos los usuarios que tienen acceso al dispositivo.
  *
- * Idea:
- *  - El ESP32 escribe `lastPing` en cada ping (1 sola escritura).
- *  - El estado real se DERIVA en vivo: hay luz  <=>  (now - lastPing) <= umbral.
- *  - `evaluateAndNotify()` compara el estado derivado con el ultimo estado
- *    persistido y, si cambio, persiste la transicion y manda las push.
- *    Lo llaman: el cron de Vercel (/api/check), pollers externos y el ping
- *    con `boot=1` (primer ping tras reconectar => "volvio la luz" al toque).
+ * Lo llaman:
+ *  - el ping con boot=1 -> primer ping tras reconectar => "volvio la luz" al toque
+ *  - `maybeSweep()` -> lo invoca CUALQUIER request (ping, /api/status, /api/devices)
+ *    en segundo plano, con un lock que lo limita a ~1 cada 10 s. Asi la deteccion
+ *    de cortes no depende del cron de Vercel (que en Hobby corre 1 vez al dia).
+ *  - un poller/IoT con el token del dispositivo -> evalua ese dispositivo
+ *  - el cron diario de Vercel (/api/check) -> barrido de respaldo 1 vez al dia
  */
 
 import { kv } from "./kv";
-import { KEYS, config } from "./config";
-import { sendToAll } from "./push";
-
-export type PowerState = "on" | "off" | "unknown";
-export type Trigger = "ping" | "check" | "status" | "cron";
-
-export interface LastPing {
-  at: number;
-  ip?: string;
-  rssi?: number;
-  vbat?: number;
-}
-
-export interface PowerSnapshot {
-  power: boolean;
-  state: PowerState;
-  lastPing: LastPing | null;
-  lastPingAt: number | null;
-  secondsSincePing: number | null;
-  since: number | null; // epoch ms de la ultima transicion
-  thresholdSeconds: number;
-  now: number;
-}
-
-export interface HistoryEvent {
-  state: Exclude<PowerState, "unknown">;
-  at: number;
-  trigger: Trigger;
-}
-
-function parseJson<T>(raw: string | null): T | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
-
-export async function readSnapshot(): Promise<PowerSnapshot> {
-  const [lastPingRaw, , transRaw] = await kv.mget(
-    KEYS.lastPing,
-    KEYS.state,
-    KEYS.lastTransitionAt,
-  );
-
-  const now = Date.now();
-  const lastPing = parseJson<LastPing>(lastPingRaw);
-  const lastPingAt = lastPing?.at ?? null;
-  const since = transRaw ? Number(transRaw) : null;
-  const thresholdMs = config.offlineThresholdSeconds * 1000;
-
-  let state: PowerState;
-  if (lastPingAt == null) state = "unknown";
-  else state = now - lastPingAt <= thresholdMs ? "on" : "off";
-
-  return {
-    power: state === "on",
-    state,
-    lastPing,
-    lastPingAt,
-    secondsSincePing:
-      lastPingAt == null ? null : Math.max(0, Math.round((now - lastPingAt) / 1000)),
-    since,
-    thresholdSeconds: config.offlineThresholdSeconds,
-    now,
-  };
-}
-
-export async function recordPing(meta: Omit<LastPing, "at">): Promise<number> {
-  const now = Date.now();
-  const payload: LastPing = { at: now };
-  if (meta.ip) payload.ip = meta.ip;
-  if (typeof meta.rssi === "number" && Number.isFinite(meta.rssi)) payload.rssi = meta.rssi;
-  if (typeof meta.vbat === "number" && Number.isFinite(meta.vbat)) payload.vbat = meta.vbat;
-  await kv.set(KEYS.lastPing, JSON.stringify(payload));
-  return now;
-}
-
-async function pushHistory(event: HistoryEvent): Promise<void> {
-  const current = parseJson<HistoryEvent[]>(await kv.get(KEYS.history)) ?? [];
-  current.unshift(event);
-  await kv.set(KEYS.history, JSON.stringify(current.slice(0, 50)));
-}
-
-export async function getHistory(): Promise<HistoryEvent[]> {
-  return parseJson<HistoryEvent[]>(await kv.get(KEYS.history)) ?? [];
-}
+import { config } from "./config";
+import {
+  lockKey,
+  pingKey,
+  pushHistory,
+  readSnapshot,
+  stateKey,
+  sinceKey,
+  type PowerSnapshot,
+  type Trigger,
+} from "./deviceState";
+import {
+  getDevice,
+  getMembers,
+  listAllDeviceIds,
+  type Device,
+} from "./devices";
+import { sendToUsers } from "./push";
 
 function fmtTime(ms: number): string {
   try {
-    return new Intl.DateTimeFormat("es-AR", {
+    return new Intl.DateTimeFormat("es-VE", {
       timeZone: config.displayTz,
       hour: "2-digit",
       minute: "2-digit",
@@ -122,83 +53,120 @@ function humanDuration(ms: number): string {
   return m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
 
-/**
- * Evalua el estado en vivo contra el persistido. Si cambio: persiste y notifica.
- * Devuelve el snapshot resultante.
- */
-export async function evaluateAndNotify(trigger: Trigger): Promise<PowerSnapshot> {
-  const snap = await readSnapshot();
+export function thresholdFor(device: Device): number {
+  return device.thresholdSeconds ?? config.offlineThresholdSeconds;
+}
+
+export async function evaluateAndNotify(
+  device: Device,
+  trigger: Trigger,
+): Promise<PowerSnapshot> {
+  const snap = await readSnapshot(device.id, thresholdFor(device));
   if (snap.state === "unknown") return snap;
 
-  const storedRaw = await kv.get(KEYS.state);
-  const stored: PowerState | null =
+  const storedRaw = await kv.get(stateKey(device.id));
+  const stored =
     storedRaw === "on" || storedRaw === "off" ? storedRaw : null;
 
   // Primer arranque: inicializa sin notificar.
   if (stored === null) {
-    await kv.set(KEYS.state, snap.state);
-    await kv.set(KEYS.lastTransitionAt, String(snap.now));
+    await kv.set(stateKey(device.id), snap.state);
+    await kv.set(sinceKey(device.id), String(snap.now));
     return { ...snap, since: snap.now };
   }
 
   if (stored === snap.state) return snap;
 
-  // Hay transicion. Lock corto (por estado destino) para que dos ejecuciones
-  // concurrentes no dupliquen la misma notificacion, sin bloquear la transicion
-  // opuesta si la luz "parpadea".
-  const gotLock = await kv.set(`${KEYS.lock}:${snap.state}`, String(snap.now), {
-    nx: true,
-    ex: 8,
-  });
+  // Transicion. Lock corto por estado destino para no duplicar la notificacion.
+  const gotLock = await kv.set(
+    lockKey(device.id, snap.state),
+    String(snap.now),
+    { nx: true, ex: 8 },
+  );
   if (!gotLock) return snap;
 
   const at = snap.now;
-  await kv.set(KEYS.state, snap.state);
-  await kv.set(KEYS.lastTransitionAt, String(at));
-  await pushHistory({ state: snap.state, at, trigger });
+  await kv.set(stateKey(device.id), snap.state);
+  await kv.set(sinceKey(device.id), String(at));
+  await pushHistory(device.id, { state: snap.state, at, trigger });
 
   try {
+    const members = await getMembers(device.id);
     if (snap.state === "off") {
-      await sendToAll({
-        title: "⚡ Se fue la luz",
+      await sendToUsers(members, {
+        title: `⚡ No hay luz en ${device.name}`,
         body: snap.lastPingAt
           ? `El monitor dejó de responder. Último ping ${fmtTime(snap.lastPingAt)}.`
           : "El monitor dejó de responder.",
-        tag: "power",
-        data: { state: "off", at },
+        tag: `power:${device.id}`,
+        data: { deviceId: device.id, state: "off", at },
       });
     } else {
       const outage = snap.since ? at - snap.since : null;
-      await sendToAll({
-        title: "✅ Volvió la luz",
+      await sendToUsers(members, {
+        title: `✅ Volvió la luz en ${device.name}`,
         body: outage
           ? `Restablecida ${fmtTime(at)} · estuvo ${humanDuration(outage)} sin luz.`
           : `Restablecida ${fmtTime(at)}.`,
-        tag: "power",
-        data: { state: "on", at },
+        tag: `power:${device.id}`,
+        data: { deviceId: device.id, state: "on", at },
       });
     }
   } catch (err) {
     console.error("[power] no se pudieron enviar notificaciones:", err);
   }
 
-  return {
-    ...snap,
-    state: snap.state,
-    power: snap.state === "on",
-    since: at,
-  };
+  return { ...snap, state: snap.state, power: snap.state === "on", since: at };
 }
 
-export function serializeSnapshot(s: PowerSnapshot) {
-  return {
-    power: s.power,
-    state: s.state,
-    lastPingAt: s.lastPingAt ? new Date(s.lastPingAt).toISOString() : null,
-    secondsSincePing: s.secondsSincePing,
-    since: s.since ? new Date(s.since).toISOString() : null,
-    thresholdSeconds: s.thresholdSeconds,
-    rssi: s.lastPing?.rssi ?? null,
-    serverTime: new Date(s.now).toISOString(),
-  };
+/**
+ * Barrido de todos los dispositivos, protegido por un lock corto para que se
+ * ejecute como mucho ~1 vez cada 10 s aunque lo disparen muchos requests.
+ * Pensado para llamarse en segundo plano (`after(() => maybeSweep())`).
+ */
+export async function maybeSweep(reason: Trigger = "check"): Promise<void> {
+  try {
+    const got = await kv.set("power:sweep", "1", { nx: true, ex: 10 });
+    if (!got) return;
+    await sweepAll(reason);
+  } catch (err) {
+    console.error("[sweep] error:", err);
+  }
+}
+
+async function sweepAll(reason: Trigger): Promise<void> {
+  const ids = await listAllDeviceIds();
+  if (ids.length === 0) return;
+
+  // Pre-filtro barato: 1 mget de lastPing + state de todos los dispositivos.
+  // Solo los "sospechosos" (estado derivado != guardado) pasan a la evaluacion
+  // completa, que es la unica que lee la config del dispositivo y notifica.
+  const raw = await kv.mget(...ids.flatMap((id) => [pingKey(id), stateKey(id)]));
+  const now = Date.now();
+  const suspects: string[] = [];
+
+  ids.forEach((id, i) => {
+    const pingRaw = raw[i * 2];
+    const stateRaw = raw[i * 2 + 1];
+    const stored =
+      stateRaw === "on" || stateRaw === "off" ? stateRaw : null;
+    let lastAt: number | null = null;
+    if (pingRaw) {
+      try {
+        lastAt = (JSON.parse(pingRaw) as { at: number }).at;
+      } catch {
+        /* ignore */
+      }
+    }
+    if (lastAt == null) return; // nunca pingueo: nada que notificar todavia
+    const quick = now - lastAt <= 6000 ? "on" : "off";
+    if (stored === null || stored !== quick) suspects.push(id);
+  });
+
+  await Promise.all(
+    suspects.map(async (id) => {
+      const device = await getDevice(id);
+      if (device) await evaluateAndNotify(device, reason);
+    }),
+  );
 }

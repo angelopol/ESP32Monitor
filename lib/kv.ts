@@ -2,11 +2,11 @@
  * Mini abstraccion de key-value.
  *
  * - En produccion usa Upstash Redis (REST) si estan las variables de entorno.
- * - En local, si no hay Upstash configurado, cae a un Map en memoria para poder
- *   correr `next dev` sin dependencias externas (no se comparte entre instancias,
- *   solo sirve para desarrollo).
+ * - En local, sin Upstash, cae a un store en memoria para poder correr
+ *   `next dev` sin dependencias externas (no persiste, solo desarrollo).
  *
- * Todos los valores se guardan y devuelven como string | null.
+ * Valores string: se guardan y devuelven como string | null.
+ * Sets: coleccion de strings (sadd / srem / smembers).
  */
 
 import { Redis } from "@upstash/redis";
@@ -14,13 +14,15 @@ import { Redis } from "@upstash/redis";
 export interface Kv {
   get(key: string): Promise<string | null>;
   mget(...keys: string[]): Promise<(string | null)[]>;
-  /** Devuelve true si se escribio. Con `nx` devuelve false si la clave ya existia. */
   set(
     key: string,
     value: string,
     opts?: { nx?: boolean; ex?: number },
   ): Promise<boolean>;
-  del(key: string): Promise<void>;
+  del(...keys: string[]): Promise<void>;
+  sadd(key: string, ...members: string[]): Promise<void>;
+  srem(key: string, ...members: string[]): Promise<void>;
+  smembers(key: string): Promise<string[]>;
 }
 
 function normalize(value: unknown): string | null {
@@ -54,14 +56,25 @@ function createRedisKv(): Kv {
       );
       return res === "OK";
     },
-    async del(key) {
-      await redis.del(key);
+    async del(...keys) {
+      if (keys.length) await redis.del(...keys);
+    },
+    async sadd(key, ...members) {
+      if (members.length) await redis.sadd(key, members[0], ...members.slice(1));
+    },
+    async srem(key, ...members) {
+      if (members.length) await redis.srem(key, members[0], ...members.slice(1));
+    },
+    async smembers(key) {
+      const res = await redis.smembers(key);
+      return (res as unknown[]).map((m) => String(m));
     },
   };
 }
 
 function createMemoryKv(): Kv {
   const store = new Map<string, { value: string; expiresAt?: number }>();
+  const sets = new Map<string, Set<string>>();
 
   const read = (key: string): string | null => {
     const entry = store.get(key);
@@ -88,8 +101,24 @@ function createMemoryKv(): Kv {
       });
       return true;
     },
-    async del(key) {
-      store.delete(key);
+    async del(...keys) {
+      for (const key of keys) {
+        store.delete(key);
+        sets.delete(key);
+      }
+    },
+    async sadd(key, ...members) {
+      const s = sets.get(key) ?? new Set<string>();
+      for (const m of members) s.add(m);
+      sets.set(key, s);
+    },
+    async srem(key, ...members) {
+      const s = sets.get(key);
+      if (!s) return;
+      for (const m of members) s.delete(m);
+    },
+    async smembers(key) {
+      return Array.from(sets.get(key) ?? []);
     },
   };
 }
@@ -99,7 +128,6 @@ const hasUpstash =
   Boolean(process.env.UPSTASH_REDIS_REST_TOKEN);
 
 if (!hasUpstash) {
-  // eslint-disable-next-line no-console
   console.warn(
     "[kv] Upstash no configurado: usando store en memoria (solo desarrollo).",
   );
