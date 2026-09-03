@@ -2,12 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type NotifState =
-  | "loading"
-  | "unsupported"
-  | "denied"
-  | "off"
-  | "on";
+type NotifState = "loading" | "unsupported" | "denied" | "off" | "on";
 
 function urlBase64ToArrayBuffer(base64String: string): ArrayBuffer {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -23,7 +18,7 @@ export default function NotificationButton() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  const refresh = useCallback(async () => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
       setState("unsupported");
       return;
@@ -32,11 +27,22 @@ export default function NotificationButton() {
       setState("denied");
       return;
     }
-    navigator.serviceWorker.ready
-      .then((reg) => reg.pushManager.getSubscription())
-      .then((sub) => setState(sub ? "on" : "off"))
-      .catch(() => setState("off"));
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      setState(sub ? "on" : "off");
+    } catch {
+      setState("off");
+    }
   }, []);
+
+  useEffect(() => {
+    refresh();
+    // Al volver a la pestaña (p. ej. tras cambiar permisos en Ajustes) re-chequea.
+    const onVis = () => document.visibilityState === "visible" && refresh();
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [refresh]);
 
   const enable = useCallback(async () => {
     setBusy(true);
@@ -45,6 +51,8 @@ export default function NotificationButton() {
       const perm = await Notification.requestPermission();
       if (perm !== "granted") {
         setState(perm === "denied" ? "denied" : "off");
+        if (perm === "denied")
+          setMsg("Sigue bloqueado. Seguí los pasos de arriba y volvé a probar.");
         return;
       }
       const reg = await navigator.serviceWorker.ready;
@@ -112,21 +120,46 @@ export default function NotificationButton() {
   return (
     <div className="notif">
       {state === "loading" && <span className="muted">…</span>}
+
       {state === "unsupported" && (
         <span className="muted">
           Este navegador no soporta notificaciones push.
         </span>
       )}
+
       {state === "denied" && (
-        <span className="muted">
-          Notificaciones bloqueadas: habilitalas en la config del navegador.
-        </span>
+        <div className="notif-denied">
+          <span className="muted">
+            Las notificaciones están <b>bloqueadas</b> para este sitio.
+            Desbloquealas y después tocá “Reintentar”:
+          </span>
+          <ul className="muted">
+            <li>
+              Navegador: tocá el candado 🔒 (o la ⓘ) junto a la dirección →
+              <b> Permisos</b> → <b>Notificaciones</b> → <b>Permitir</b>.
+            </li>
+            <li>
+              App instalada: Ajustes del teléfono → <b>Apps</b> → Monitor de Luz
+              → <b>Notificaciones</b> → activar.
+            </li>
+          </ul>
+          <div className="btns-row">
+            <button className="sm primary" onClick={enable} disabled={busy}>
+              Reintentar
+            </button>
+            <button className="sm ghost" onClick={refresh} disabled={busy}>
+              Ya lo desbloqueé
+            </button>
+          </div>
+        </div>
       )}
+
       {state === "off" && (
         <button className="primary sm" onClick={enable} disabled={busy}>
           Activar notificaciones
         </button>
       )}
+
       {state === "on" && (
         <>
           <button className="sm" onClick={test}>
@@ -137,6 +170,7 @@ export default function NotificationButton() {
           </button>
         </>
       )}
+
       {msg && <span className="muted">{msg}</span>}
     </div>
   );

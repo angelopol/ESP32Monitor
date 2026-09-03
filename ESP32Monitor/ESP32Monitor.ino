@@ -16,17 +16,11 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 
+// WIFI_SSID / WIFI_PASS / SERVER_URL / DEVICE_TOKEN viven en secrets.h
+// (ignorado por git). Copiá secrets.example.h -> secrets.h y completalo.
+#include "secrets.h"
+
 // ----------------------------- CONFIGURACION ---------------------------------
-const char *WIFI_SSID = "TU_WIFI";
-const char *WIFI_PASS = "TU_PASSWORD";
-
-// Sin barra final. Ej: "https://mi-monitor.vercel.app"
-const char *SERVER_URL = "https://TU-APP.vercel.app";
-
-// Token del dispositivo. Se genera al crear el dispositivo en la app web
-// (boton "Conexion ESP32" de la tarjeta). Cada dispositivo tiene el suyo.
-const char *DEVICE_TOKEN = "pega-aca-el-token-del-dispositivo";
-
 const unsigned long PING_INTERVAL_MS = 5000;   // cada cuanto pinguear
 const unsigned long HTTP_TIMEOUT_MS = 4000;    // timeout por request
 const unsigned long WIFI_RETRY_MS = 10000;     // reintento de WiFi

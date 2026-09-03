@@ -14,9 +14,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const body = await readJson<{ email?: string; password?: string; code?: string }>(req);
+  const body = await readJson<{
+    email?: string;
+    password?: string;
+    code?: string;
+    remember?: boolean;
+  }>(req);
   if (!body?.email || !body?.password)
     return jsonError("Falta correo o contraseña");
+  const remember = body.remember !== false;
 
   if (config.signupCode && body.code !== config.signupCode)
     return jsonError("Código de invitación inválido", 403);
@@ -35,8 +41,8 @@ export async function POST(req: NextRequest) {
     if (await getDevice(deviceId)) await addMember(deviceId, user.id);
   }
 
-  const token = await createSession(user.id);
+  const token = await createSession(user.id, remember);
   const res = NextResponse.json({ ok: true, user }, { headers: NO_STORE });
-  res.cookies.set(sessionCookie(token));
+  res.cookies.set(sessionCookie(token, remember));
   return res;
 }

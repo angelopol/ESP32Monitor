@@ -28,7 +28,7 @@ dispositivo para que otros aparatos IoT actúen según haya o no luz.
 |---|---|
 | `user:<id>` | `{ id, email, passwordHash, createdAt }` |
 | `user:byEmail:<email>` | `<userId>` |
-| `session:<token>` | `<userId>` (TTL 30 días) — cookie `sid` httpOnly |
+| `session:<token>` | `{ uid, remember }` — cookie `sid` httpOnly. "Recordar sesión" ON → ~13 meses con renovación automática en cada `/api/auth/me`; OFF → cookie de sesión + TTL 2 días |
 | `invite:<email>` | `[deviceId, …]` pendientes hasta que ese correo se registre |
 | `device:<id>` | `{ id, name, ownerId, token, thresholdSeconds, createdAt }` |
 | `device:byToken:<token>` | `<deviceId>` (auth del ping / status IoT) |

@@ -17,6 +17,7 @@ export default function AuthForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
+  const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -29,7 +30,9 @@ export default function AuthForm({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(
-          mode === "register" ? { email, password, code } : { email, password },
+          mode === "register"
+            ? { email, password, code, remember }
+            : { email, password, remember },
         ),
       });
       const data = await res.json();
@@ -97,6 +100,15 @@ export default function AuthForm({
             />
           </label>
         )}
+
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+          />
+          Mantener sesión iniciada en este dispositivo
+        </label>
 
         {error && <p className="err">{error}</p>}
 

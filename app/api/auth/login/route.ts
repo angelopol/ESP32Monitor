@@ -7,20 +7,25 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const body = await readJson<{ email?: string; password?: string }>(req);
+  const body = await readJson<{
+    email?: string;
+    password?: string;
+    remember?: boolean;
+  }>(req);
   if (!body?.email || !body?.password)
     return jsonError("Falta correo o contraseña");
+  const remember = body.remember !== false;
 
   const stored = await getStoredUserByEmail(body.email);
   const ok =
     stored != null && (await verifyPassword(body.password, stored.passwordHash));
   if (!ok || !stored) return jsonError("Correo o contraseña incorrectos", 401);
 
-  const token = await createSession(stored.id);
+  const token = await createSession(stored.id, remember);
   const res = NextResponse.json(
     { ok: true, user: { id: stored.id, email: stored.email, createdAt: stored.createdAt } },
     { headers: NO_STORE },
   );
-  res.cookies.set(sessionCookie(token));
+  res.cookies.set(sessionCookie(token, remember));
   return res;
 }
