@@ -26,6 +26,10 @@
 #include "secrets.h"
 
 // ----------------------------- CONFIGURACION ---------------------------------
+// Subí este número en cada cambio: al arrancar lo imprime, así confirmás que la
+// actualización OTA entró.
+#define FW_VERSION 1
+
 const unsigned long PING_INTERVAL_MS = 5000;      // cada cuanto pinguear
 const unsigned long HTTP_TIMEOUT_MS  = 4000;      // timeout por request
 const unsigned long WIFI_RETRY_MS    = 10000;     // reintento de WiFi
@@ -133,7 +137,7 @@ void guardWatchdogs() {
 void setup() {
   Serial.begin(115200);
   delay(200);
-  Serial.println("\n=== ESP32 Power Monitor ===");
+  Serial.printf("\n=== ESP32 Power Monitor  (fw v%d) ===\n", FW_VERSION);
 
   pinMode(LED_BUILTIN, OUTPUT);
   setLed(false);
