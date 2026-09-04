@@ -127,8 +127,16 @@ depende de él (ver *"Por qué está diseñado así"*).
 1. Abrí la URL de Vercel → **Crear cuenta**.
 2. **+ Agregar dispositivo** → poné el nombre de la ubicación (ej. "Casa").
 3. En la tarjeta → **Conexión ESP32**: copiá `SERVER_URL` y `DEVICE_TOKEN`.
-4. Pegalos en `ESP32Monitor/ESP32Monitor.ino` (Arduino IDE con el core de ESP32),
-   completá WiFi y subilo. En el monitor serie (115200) verás `[ping] 200`.
+4. Copiá `ESP32Monitor/secrets.example.h` a `ESP32Monitor/secrets.h` y completá
+   WiFi, `SERVER_URL`, `DEVICE_TOKEN` y una `OTA_PASSWORD` propia. `secrets.h`
+   está en `.gitignore` (no se sube a GitHub).
+5. Abrí `ESP32Monitor/ESP32Monitor.ino` en el Arduino IDE (core de ESP32) y subilo
+   por USB. En el monitor serie (115200) verás `[ping] 200` y `[ota] listo`.
+
+**Actualizar el firmware ya instalado (sin cable):** con la PC en la misma red,
+en el Arduino IDE aparece un puerto de red `esp32monitor at x.x.x.x` — elegilo,
+subí, y te pide la `OTA_PASSWORD`. El firmware además **se reinicia solo** si pasa
+10 min sin un ping exitoso o si se queda sin RAM.
 
 ### 6. Compartir con otra persona
 

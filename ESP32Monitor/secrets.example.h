@@ -13,3 +13,9 @@
 // Token del dispositivo: se genera al crear el dispositivo en la app web
 // (botón "Conexión ESP32" de la tarjeta). Cada dispositivo tiene el suyo.
 #define DEVICE_TOKEN  "pega-aca-el-token-del-dispositivo"
+
+// --- Actualización por WiFi (OTA) ---
+// Nombre en la red (podrás subir firmware a  <OTA_HOSTNAME>.local ) y clave
+// para autorizar esas actualizaciones. Elegí una clave propia.
+#define OTA_HOSTNAME  "esp32monitor"
+#define OTA_PASSWORD  "elegi-una-clave-para-OTA"
