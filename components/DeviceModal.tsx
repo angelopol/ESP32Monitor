@@ -39,6 +39,13 @@ function fmt(iso: string | null): string {
   }
 }
 
+function fmtHoursMinutes(seconds: number): string {
+  const totalMinutes = Math.max(0, Math.floor(seconds / 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h${minutes.toString().padStart(2, "0")}m`;
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
@@ -80,8 +87,10 @@ export default function DeviceModal({
   const [inviteEmail, setInviteEmail] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showHoursMinutes, setShowHoursMinutes] = useState(false);
 
   useEffect(() => setName(device.name), [device.name]);
+  useEffect(() => setShowHoursMinutes(false), [device.id]);
 
   const st = device.status.state;
   const statusUrl = device.token
@@ -151,6 +160,8 @@ export default function DeviceModal({
     loadMembers();
   };
 
+  const toggleLastPingFormat = () => setShowHoursMinutes((v) => !v);
+
   return (
     <Modal title={device.name} onClose={onClose}>
       <div className="modal-status">
@@ -184,9 +195,27 @@ export default function DeviceModal({
       <div className="device-meta">
         <span className="item">
           <Clock size={14} aria-hidden="true" />
-          {device.status.secondsSincePing != null
-            ? `último ping hace ${device.status.secondsSincePing}s`
-            : "sin pings todavía"}
+          {device.status.secondsSincePing != null ? (
+            <span
+              role="button"
+              tabIndex={0}
+              title="Tocá para alternar entre segundos y horas/minutos"
+              onClick={toggleLastPingFormat}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggleLastPingFormat();
+                }
+              }}
+            >
+              último ping hace{" "}
+              {showHoursMinutes
+                ? fmtHoursMinutes(device.status.secondsSincePing)
+                : `${device.status.secondsSincePing}s`}
+            </span>
+          ) : (
+            "sin pings todavía"
+          )}
         </span>
         <span className="item">
           <Gauge size={14} aria-hidden="true" />
