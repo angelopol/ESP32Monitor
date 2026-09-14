@@ -583,8 +583,11 @@ label.check input[type="checkbox"] {
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
-  padding: 10px;
-  font-size: 0.86rem;
+  padding: 10px 6px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--text-muted);
   min-height: 40px;
 }
@@ -619,6 +622,29 @@ label.check input[type="checkbox"] {
 .empty-state p {
   font-size: 13px;
   max-width: 34ch;
+}
+
+.devices-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding-top: var(--space-1);
+}
+.pager .muted {
+  font-variant-numeric: tabular-nums;
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
 /* ------------------------------ notificaciones ------------------------------ */
@@ -690,7 +716,14 @@ label.check input[type="checkbox"] {
   gap: var(--space-3);
 }
 
+/* Tarjeta de dispositivo: es un <button> que abre el modal de detalle. */
 .device {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+  width: 100%;
+  gap: var(--space-3);
   background: var(--surface-1);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
@@ -710,16 +743,37 @@ label.check input[type="checkbox"] {
   box-shadow: var(--ring-off);
 }
 
-.device-head {
+.device-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+.device-name-row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  flex-wrap: wrap;
 }
-.device-head h3 {
+.device-name-row h3 {
   margin: 0;
   font-size: 1rem;
   font-weight: 700;
   overflow-wrap: anywhere;
+}
+.device-state-compact {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.device-state-compact.off {
+  color: var(--off-text);
+  font-weight: 600;
+}
+.device-chevron {
+  color: var(--text-faint);
+  flex: none;
 }
 .grow {
   flex: 1;
@@ -744,6 +798,10 @@ label.check input[type="checkbox"] {
   height: 34px;
   border-radius: var(--radius-full);
   flex: none;
+}
+.status-pill.lg {
+  width: 44px;
+  height: 44px;
 }
 .status-pill.on {
   color: var(--on);
@@ -1051,6 +1109,78 @@ label.check input[type="checkbox"] {
 .skeleton-card {
   height: 128px;
   border-radius: var(--radius-lg);
+}
+
+/* ---------------------------------- modal -------------------------------------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 15, 0.6);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+  animation: modal-fade var(--dur-base) var(--ease);
+}
+.modal-panel {
+  width: 100%;
+  max-width: 480px;
+  max-height: 88dvh;
+  overflow-y: auto;
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  border-bottom: none;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  padding: var(--space-4) var(--space-4) calc(var(--space-6) + var(--sa-bottom));
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  animation: modal-sheet-up var(--dur-slow) var(--ease);
+}
+@keyframes modal-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes modal-sheet-up {
+  from {
+    transform: translateY(28px);
+    opacity: 0.6;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay,
+  .modal-panel {
+    animation: none;
+  }
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  position: sticky;
+  top: 0;
+  background: var(--surface-1);
+}
+.modal-head h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.modal-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 /* ---------------------------------- footer ------------------------------------ */

@@ -3,16 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
   Download,
   LogOut,
   Plus,
   PlugZap,
+  RotateCw,
+  Settings,
   Wifi,
   WifiOff,
   Zap,
 } from "lucide-react";
 import NotificationButton from "./NotificationButton";
 import DeviceCard, { type Device } from "./DeviceCard";
+import DeviceModal from "./DeviceModal";
 import StatsView from "./StatsView";
 
 interface User {
@@ -21,6 +26,8 @@ interface User {
   createdAt: number;
 }
 
+const PAGE_SIZE = 5;
+
 export default function AppShell({
   user,
   onLogout,
@@ -28,14 +35,17 @@ export default function AppShell({
   user: User;
   onLogout: () => void;
 }) {
-  const [view, setView] = useState<"devices" | "stats">("devices");
+  const [view, setView] = useState<"devices" | "stats" | "settings">("devices");
   const [devices, setDevices] = useState<Device[] | null>(null);
   const [error, setError] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [standalone, setStandalone] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [openDeviceId, setOpenDeviceId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
   const origin = useRef("");
 
   useEffect(() => {
@@ -69,10 +79,32 @@ export default function AppShell({
     };
   }, [load]);
 
+  // Cierra el modal solo si el dispositivo abierto desapareció de la lista
+  // (por ejemplo, lo acaban de eliminar).
+  useEffect(() => {
+    if (openDeviceId && devices && !devices.some((d) => d.id === openDeviceId)) {
+      setOpenDeviceId(null);
+    }
+  }, [devices, openDeviceId]);
+
+  const totalPages = Math.max(1, Math.ceil((devices?.length ?? 0) / PAGE_SIZE));
+  useEffect(() => {
+    if (page > totalPages - 1) setPage(totalPages - 1);
+  }, [page, totalPages]);
+
+  const pageItems = (devices ?? []).slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const openDevice = devices?.find((d) => d.id === openDeviceId) ?? null;
+
   const logout = async () => {
     setLoggingOut(true);
     await fetch("/api/auth/logout", { method: "POST" });
     onLogout();
+  };
+
+  const manualRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
   };
 
   const createDevice = async (e: React.FormEvent) => {
@@ -108,19 +140,6 @@ export default function AppShell({
         </button>
       </header>
 
-      <div className="card notif-card">
-        <NotificationButton />
-      </div>
-
-      {!standalone && (
-        <p className="hint">
-          <Download size={16} aria-hidden="true" />
-          Instalá la app (menú del navegador →{" "}
-          <b>Agregar a pantalla de inicio</b>) para recibir avisos con la app
-          cerrada.
-        </p>
-      )}
-
       <nav className="seg" aria-label="Secciones">
         <button
           className={view === "devices" ? "seg-btn active" : "seg-btn"}
@@ -138,48 +157,58 @@ export default function AppShell({
           <BarChart3 size={15} />
           Estadísticas
         </button>
+        <button
+          className={view === "settings" ? "seg-btn active" : "seg-btn"}
+          onClick={() => setView("settings")}
+          aria-current={view === "settings"}
+        >
+          <Settings size={15} />
+          Ajustes
+        </button>
       </nav>
 
-      {view === "stats" ? (
-        <StatsView />
-      ) : (
-        <>
-          {error && (
-            <p className="err" role="alert">
-              <WifiOff size={16} />
-              Sin conexión al servidor.
+      {view === "stats" && <StatsView />}
+
+      {view === "settings" && (
+        <div className="settings">
+          <div className="card">
+            <p className="chart-title">
+              <Settings size={14} aria-hidden="true" />
+              Notificaciones
+            </p>
+            <NotificationButton />
+          </div>
+          {!standalone && (
+            <p className="hint">
+              <Download size={16} aria-hidden="true" />
+              Instalá la app (menú del navegador →{" "}
+              <b>Agregar a pantalla de inicio</b>) para recibir avisos con la
+              app cerrada.
             </p>
           )}
+        </div>
+      )}
 
-          {devices?.length === 0 && (
-            <div className="empty-state">
-              <PlugZap aria-hidden="true" />
-              <p>
-                Todavía no tenés dispositivos. Creá uno o pedile a alguien que
-                te comparta el suyo con este correo.
-              </p>
-            </div>
-          )}
-
-          {devices === null && !error && (
-            <>
-              <div className="skeleton skeleton-card" aria-hidden="true" />
-              <div className="skeleton skeleton-card" aria-hidden="true" />
-            </>
-          )}
-
-          <div className="devices">
-            {devices?.map((d) => (
-              <DeviceCard
-                key={d.id}
-                device={d}
-                origin={origin.current}
-                onChanged={load}
-              />
-            ))}
+      {view === "devices" && (
+        <>
+          <div className="devices-toolbar">
+            <button
+              className="sm icon-only ghost"
+              onClick={manualRefresh}
+              disabled={refreshing}
+              aria-label="Actualizar dispositivos"
+            >
+              <RotateCw size={16} className={refreshing ? "spin" : ""} />
+            </button>
+            {!adding && (
+              <button className="sm grow" onClick={() => setAdding(true)}>
+                <Plus size={16} />
+                Agregar dispositivo
+              </button>
+            )}
           </div>
 
-          {adding ? (
+          {adding && (
             <form className="card add-form" onSubmit={createDevice}>
               <label htmlFor="new-device-name">
                 Nombre del dispositivo{" "}
@@ -206,13 +235,75 @@ export default function AppShell({
                 </button>
               </div>
             </form>
-          ) : (
-            <button className="sm block" onClick={() => setAdding(true)}>
-              <Plus size={16} />
-              Agregar dispositivo
-            </button>
+          )}
+
+          {error && (
+            <p className="err" role="alert">
+              <WifiOff size={16} />
+              Sin conexión al servidor.
+            </p>
+          )}
+
+          {devices?.length === 0 && (
+            <div className="empty-state">
+              <PlugZap aria-hidden="true" />
+              <p>
+                Todavía no tenés dispositivos. Creá uno o pedile a alguien que
+                te comparta el suyo con este correo.
+              </p>
+            </div>
+          )}
+
+          {devices === null && !error && (
+            <>
+              <div className="skeleton skeleton-card" aria-hidden="true" />
+              <div className="skeleton skeleton-card" aria-hidden="true" />
+            </>
+          )}
+
+          <div className="devices">
+            {pageItems.map((d) => (
+              <DeviceCard
+                key={d.id}
+                device={d}
+                onOpen={() => setOpenDeviceId(d.id)}
+              />
+            ))}
+          </div>
+
+          {devices && devices.length > PAGE_SIZE && (
+            <div className="pager">
+              <button
+                className="sm icon-only ghost"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                aria-label="Página anterior"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className="muted">
+                Página {page + 1} de {totalPages}
+              </span>
+              <button
+                className="sm icon-only ghost"
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                aria-label="Página siguiente"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
           )}
         </>
+      )}
+
+      {openDevice && (
+        <DeviceModal
+          device={openDevice}
+          origin={origin.current}
+          onChanged={load}
+          onClose={() => setOpenDeviceId(null)}
+        />
       )}
 
       <footer>
