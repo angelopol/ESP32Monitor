@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Zap } from "lucide-react";
 import AuthForm from "./AuthForm";
 import AppShell from "./AppShell";
 
@@ -25,8 +26,17 @@ export default function Dashboard() {
   if (loading) {
     return (
       <main className="wrap">
-        <h1 className="title">Monitor de Luz</h1>
-        <p className="muted">Cargando…</p>
+        <span className="brand">
+          <span className="brand-mark">
+            <Zap size={17} strokeWidth={2.5} fill="currentColor" />
+          </span>
+          <h1 className="title">Monitor de Luz</h1>
+        </span>
+        <div className="skeleton skeleton-card" aria-hidden="true" />
+        <div className="skeleton skeleton-card" aria-hidden="true" />
+        <span className="muted" role="status">
+          Cargando…
+        </span>
       </main>
     );
   }

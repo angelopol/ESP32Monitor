@@ -13,3 +13,6 @@ next-env.d.ts.timestamp
 # Datos privados del firmware ESP32 (WiFi, token, URL)
 secrets.h
 ESP32Monitor/secrets.h
+
+# Cache local de skills de Claude Code (no es parte del proyecto)
+.claude/

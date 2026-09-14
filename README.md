@@ -151,6 +151,14 @@ En la tarjeta del dispositivo → **Compartir** → escribí el correo.
 Abrir la URL en el celular → *Agregar a pantalla de inicio* → abrir la app →
 **Activar notificaciones** (iOS: 16.4+ y la app instalada).
 
+En iOS, el ícono de la pantalla de inicio y las pantallas de arranque usan
+`public/apple-icon.png` y `public/splash/*.png` (no el manifest: Safari los
+ignora para esto). Se regeneran junto con los del manifest:
+
+```bash
+npm run icons   # scripts/gen-icons.mjs
+```
+
 ## Endpoints
 
 ### Auth (cookie de sesión)

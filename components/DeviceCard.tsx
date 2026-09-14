@@ -1,6 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  Cable,
+  Check,
+  Clock,
+  Copy,
+  Pencil,
+  Share2,
+  SignalHigh,
+  Trash2,
+  UserMinus,
+  Zap,
+  ZapOff,
+} from "lucide-react";
 
 export interface DeviceStatus {
   power: boolean;
@@ -42,6 +55,29 @@ function fmt(iso: string | null): string {
   }
 }
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* portapapeles no disponible: el usuario copia a mano */
+    }
+  };
+  return (
+    <button
+      type="button"
+      className="sm icon-only ghost"
+      onClick={copy}
+      aria-label={copied ? "Copiado" : "Copiar"}
+    >
+      {copied ? <Check size={16} color="var(--on)" /> : <Copy size={16} />}
+    </button>
+  );
+}
+
 export default function DeviceCard({
   device,
   origin,
@@ -62,6 +98,9 @@ export default function DeviceCard({
   useEffect(() => setName(device.name), [device.name]);
 
   const st = device.status.state;
+  const statusUrl = device.token
+    ? `${origin}/api/status?token=${device.token}&format=plain`
+    : "";
 
   const loadMembers = useCallback(async () => {
     const res = await fetch(`/api/devices/${device.id}/members`);
@@ -129,12 +168,21 @@ export default function DeviceCard({
   return (
     <article className={`device ${st}`}>
       <header className="device-head">
-        <span className={`dot ${st}`} />
+        <span className={`status-pill ${st}`} aria-hidden="true">
+          {st === "on" && <Zap size={17} strokeWidth={2.5} fill="currentColor" />}
+          {st === "off" && <ZapOff size={17} strokeWidth={2.5} />}
+          {st === "unknown" && <SignalHigh size={17} />}
+        </span>
         {renaming ? (
           <span className="rename">
-            <input value={name} onChange={(e) => setName(e.target.value)} />
-            <button className="sm" onClick={saveName} disabled={busy}>
-              OK
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              aria-label="Nombre del dispositivo"
+              autoFocus
+            />
+            <button className="sm icon-only" onClick={saveName} disabled={busy} aria-label="Guardar nombre">
+              <Check size={16} />
             </button>
           </span>
         ) : (
@@ -144,43 +192,55 @@ export default function DeviceCard({
         {!device.isOwner && <span className="badge">compartido</span>}
       </header>
 
-      <p className="device-state">
-        {st === "on" ? "Hay luz" : st === "off" ? "SE FUE LA LUZ" : "Sin datos"}
+      <p className={`device-state ${st === "off" ? "off" : ""}`}>
+        {st === "on" && "Hay luz"}
+        {st === "off" && (
+          <>
+            <ZapOff size={18} aria-hidden="true" /> Se fue la luz
+          </>
+        )}
+        {st === "unknown" && "Sin datos todavía"}
       </p>
+
       <div className="device-meta">
-        <span>
+        <span className="item">
+          <Clock size={14} aria-hidden="true" />
           {device.status.secondsSincePing != null
             ? `último ping hace ${device.status.secondsSincePing}s`
             : "sin pings todavía"}
         </span>
-        <span>·</span>
-        <span>umbral {device.thresholdSeconds}s</span>
+        <span className="item">umbral {device.thresholdSeconds}s</span>
         {device.status.rssi != null && (
-          <>
-            <span>·</span>
-            <span>{device.status.rssi} dBm</span>
-          </>
+          <span className="item">
+            <SignalHigh size={14} aria-hidden="true" />
+            {device.status.rssi} dBm
+          </span>
         )}
       </div>
       <div className="device-meta">
-        <span>cambió de estado: {fmt(device.status.since)}</span>
+        <span className="item">cambió de estado: {fmt(device.status.since)}</span>
       </div>
 
       {device.isOwner && (
         <div className="device-actions">
           <button className="sm" onClick={() => setRenaming((v) => !v)}>
+            <Pencil size={15} />
             Renombrar
           </button>
-          <button className="sm" onClick={toggleShare}>
+          <button className="sm" onClick={toggleShare} aria-expanded={panel === "share"}>
+            <Share2 size={15} />
             Compartir
           </button>
           <button
             className="sm"
             onClick={() => setPanel(panel === "setup" ? "none" : "setup")}
+            aria-expanded={panel === "setup"}
           >
+            <Cable size={15} />
             Conexión ESP32
           </button>
-          <button className="sm ghost" onClick={removeDevice}>
+          <button className="sm danger" onClick={removeDevice}>
+            <Trash2 size={15} />
             Eliminar
           </button>
         </div>
@@ -191,10 +251,12 @@ export default function DeviceCard({
           <form onSubmit={invite} className="invite">
             <input
               type="email"
+              inputMode="email"
               placeholder="correo@ejemplo.com"
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
               required
+              aria-label="Correo a compartir"
             />
             <button className="sm primary" disabled={busy}>
               Agregar
@@ -208,7 +270,12 @@ export default function DeviceCard({
                 {m.isOwner ? (
                   <span className="badge">dueño</span>
                 ) : (
-                  <button className="sm ghost" onClick={() => removeMember(m.id)}>
+                  <button
+                    className="sm ghost"
+                    onClick={() => removeMember(m.id)}
+                    aria-label={`Quitar a ${m.email}`}
+                  >
+                    <UserMinus size={14} />
                     quitar
                   </button>
                 )}
@@ -221,16 +288,17 @@ export default function DeviceCard({
       {panel === "setup" && device.isOwner && device.token && (
         <div className="subpanel">
           <p className="muted">
-            Cargá esto en el firmware del ESP32 (<code>ESP32Monitor.ino</code>):
+            Cargá esto en <code>secrets.h</code> del firmware del ESP32:
           </p>
-          <pre>
-{`SERVER_URL   = "${origin}"
-DEVICE_TOKEN = "${device.token}"`}
-          </pre>
-          <p className="muted">
-            Endpoint IoT:{" "}
-            <code>{`${origin}/api/status?token=${device.token}&format=plain`}</code>
-          </p>
+          <div className="subpanel-row">
+            <pre>{`SERVER_URL   = "${origin}"\nDEVICE_TOKEN = "${device.token}"`}</pre>
+            <CopyButton text={`SERVER_URL   = "${origin}"\nDEVICE_TOKEN = "${device.token}"`} />
+          </div>
+          <p className="muted">Endpoint para otros dispositivos IoT:</p>
+          <div className="subpanel-row">
+            <code>{statusUrl}</code>
+            <CopyButton text={statusUrl} />
+          </div>
         </div>
       )}
     </article>

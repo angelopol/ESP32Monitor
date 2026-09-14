@@ -1,13 +1,17 @@
 {
+  "id": "/",
   "name": "Monitor de Luz",
   "short_name": "Monitor Luz",
   "description": "Avisa cuando se corta la electricidad en casa usando un ESP32.",
+  "lang": "es",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
+  "categories": ["utilities", "productivity"],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -22,7 +26,7 @@
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/icon-mask-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

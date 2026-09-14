@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
+import { Eye, EyeOff, KeyRound, Loader2, Mail, TicketCheck, Zap } from "lucide-react";
 
 interface User {
   id: string;
@@ -16,10 +17,12 @@ export default function AuthForm({
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [code, setCode] = useState("");
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const errorId = useId();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,12 +52,21 @@ export default function AuthForm({
   };
 
   return (
-    <main className="wrap">
-      <h1 className="title">Monitor de Luz</h1>
-      <form className="card auth" onSubmit={submit}>
-        <div className="tabs">
+    <main className="wrap auth-wrap">
+      <div className="auth-hero">
+        <span className="brand-mark">
+          <Zap size={30} strokeWidth={2.5} fill="currentColor" />
+        </span>
+        <h1>Monitor de Luz</h1>
+        <p>Enterate al instante cuando se corta la electricidad en tus lugares.</p>
+      </div>
+
+      <form className="card auth" onSubmit={submit} aria-describedby={error ? errorId : undefined}>
+        <div className="tabs" role="tablist" aria-label="Ingresar o crear cuenta">
           <button
             type="button"
+            role="tab"
+            aria-selected={mode === "login"}
             className={mode === "login" ? "tab active" : "tab"}
             onClick={() => setMode("login")}
           >
@@ -62,6 +74,8 @@ export default function AuthForm({
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={mode === "register"}
             className={mode === "register" ? "tab active" : "tab"}
             onClick={() => setMode("register")}
           >
@@ -69,35 +83,61 @@ export default function AuthForm({
           </button>
         </div>
 
-        <label>
+        <label htmlFor="auth-email">
           Correo
-          <input
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </label>
-        <label>
-          Contraseña
-          <input
-            type="password"
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
-        {mode === "register" && (
-          <label>
-            Código de invitación <span className="muted">(si te lo pidieron)</span>
+          <span className="field">
+            <Mail size={17} aria-hidden="true" />
             <input
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
+              id="auth-email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
+          </span>
+        </label>
+
+        <label htmlFor="auth-password">
+          Contraseña
+          <span className="field">
+            <KeyRound size={17} aria-hidden="true" />
+            <input
+              id="auth-password"
+              type={showPassword ? "text" : "password"}
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={{ paddingRight: 40 }}
+            />
+            <button
+              type="button"
+              className="toggle-visibility"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              aria-pressed={showPassword}
+            >
+              {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+            </button>
+          </span>
+        </label>
+
+        {mode === "register" && (
+          <label htmlFor="auth-code">
+            Código de invitación <span className="faint">(si te lo pidieron)</span>
+            <span className="field">
+              <TicketCheck size={17} aria-hidden="true" />
+              <input
+                id="auth-code"
+                type="text"
+                autoComplete="off"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </span>
           </label>
         )}
 
@@ -110,12 +150,18 @@ export default function AuthForm({
           Mantener sesión iniciada en este dispositivo
         </label>
 
-        {error && <p className="err">{error}</p>}
+        {error && (
+          <p className="err" id={errorId} role="alert">
+            {error}
+          </p>
+        )}
 
-        <button className="primary" disabled={busy}>
-          {busy ? "..." : mode === "login" ? "Ingresar" : "Crear cuenta"}
+        <button className="primary block" disabled={busy}>
+          {busy && <Loader2 size={17} className="spin" aria-hidden="true" />}
+          {mode === "login" ? "Ingresar" : "Crear cuenta"}
         </button>
       </form>
+
       <footer>
         Al crear una cuenta vas a ver los dispositivos que te compartan.
       </footer>

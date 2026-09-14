@@ -1,6 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  Activity,
+  CalendarDays,
+  Clock3,
+  Flame,
+  ShieldCheck,
+  Snowflake,
+  TrendingDown,
+  TrendingUp,
+  Trophy,
+  ZapOff,
+} from "lucide-react";
 import MiniBars, { type Bar } from "./MiniBars";
 
 type RangeKey = "day" | "week" | "month" | "quarter" | "year";
@@ -88,8 +100,8 @@ function Delta({ cur, prev, range }: { cur: number; prev: number; range: RangeKe
   const up = diff > 0;
   return (
     <span className={`delta ${up ? "up" : "down"}`}>
-      {up ? "▲" : "▼"} {fmtDur(Math.abs(diff))} {up ? "más" : "menos"} que{" "}
-      {PREV_LABEL[range]}
+      {up ? <TrendingUp size={13} /> : <TrendingDown size={13} />}
+      {fmtDur(Math.abs(diff))} {up ? "más" : "menos"} que {PREV_LABEL[range]}
     </span>
   );
 }
@@ -135,18 +147,36 @@ export default function StatsView() {
         ))}
       </div>
 
-      {error && <p className="err">No se pudieron cargar las estadísticas.</p>}
-      {loading && !data && <p className="muted">Calculando…</p>}
+      {error && (
+        <p className="err" role="alert">
+          <ZapOff size={16} />
+          No se pudieron cargar las estadísticas.
+        </p>
+      )}
+      {loading && !data && (
+        <>
+          <div className="skeleton skeleton-card" aria-hidden="true" />
+          <div className="skeleton skeleton-card" aria-hidden="true" />
+        </>
+      )}
 
       {data && data.devices.length === 0 && (
-        <p className="hint">Todavía no hay dispositivos con datos.</p>
+        <p className="hint">
+          <Activity size={16} aria-hidden="true" />
+          Todavía no hay dispositivos con datos.
+        </p>
       )}
 
       {data && data.devices.length > 0 && (
         <>
           <div className="tiles">
             <div className="tile">
-              <span className="tile-k">Sin luz ({RANGE_LABEL[range].toLowerCase()})</span>
+              <span className="tile-head">
+                <ZapOff size={15} />
+                <span className="tile-k">
+                  Sin luz ({RANGE_LABEL[range].toLowerCase()})
+                </span>
+              </span>
               <span className="tile-v">{fmtDur(data.totals.outageMs)}</span>
               <Delta
                 cur={data.totals.outageMs}
@@ -155,14 +185,20 @@ export default function StatsView() {
               />
             </div>
             <div className="tile">
-              <span className="tile-k">Cortes</span>
+              <span className="tile-head">
+                <Activity size={15} />
+                <span className="tile-k">Cortes</span>
+              </span>
               <span className="tile-v">{data.totals.outageCount}</span>
               <span className="delta flat">
                 {data.totals.prevOutageCount} en {PREV_LABEL[range]}
               </span>
             </div>
             <div className="tile">
-              <span className="tile-k">Disponibilidad</span>
+              <span className="tile-head">
+                <ShieldCheck size={15} />
+                <span className="tile-k">Disponibilidad</span>
+              </span>
               <span className="tile-v">{pct(data.totals.availability)}</span>
               <span className="delta flat">promedio de todos los lugares</span>
             </div>
@@ -171,19 +207,27 @@ export default function StatsView() {
           {data.ranking && (
             <div className="card ranking">
               <div>
-                <span className="muted">Más se corta</span>
+                <span className="muted">
+                  <Flame size={13} /> Más se corta
+                </span>
                 <b>{nameOf(data.ranking.mostOutageTime)}</b>
               </div>
               <div>
-                <span className="muted">Menos se corta</span>
+                <span className="muted">
+                  <Snowflake size={13} /> Menos se corta
+                </span>
                 <b>{nameOf(data.ranking.leastOutageTime)}</b>
               </div>
               <div>
-                <span className="muted">Más cortes</span>
+                <span className="muted">
+                  <ZapOff size={13} /> Más cortes
+                </span>
                 <b>{nameOf(data.ranking.mostOutages)}</b>
               </div>
               <div>
-                <span className="muted">Mejor disponibilidad</span>
+                <span className="muted">
+                  <Trophy size={13} /> Mejor disponibilidad
+                </span>
                 <b>{nameOf(data.ranking.bestAvailability)}</b>
               </div>
             </div>
@@ -226,7 +270,12 @@ function DeviceStatsCard({ d, range }: { d: DeviceStat; range: RangeKey }) {
     <div className="card devstat">
       <div className="devstat-head">
         <b>{d.name}</b>
-        <span className={d.current.currentlyOut ? "badge off" : "badge"}>
+        <span className={d.current.currentlyOut ? "badge off" : "badge on"}>
+          {d.current.currentlyOut ? (
+            <ZapOff size={12} />
+          ) : (
+            <ShieldCheck size={12} />
+          )}
           {d.current.currentlyOut ? "sin luz ahora" : pct(d.current.availability)}
         </span>
       </div>
@@ -240,7 +289,10 @@ function DeviceStatsCard({ d, range }: { d: DeviceStat; range: RangeKey }) {
         <span>recuperación media {fmtDur(d.current.mttrMs)}</span>
       </div>
 
-      <p className="chart-title">Minutos sin luz por día</p>
+      <p className="chart-title">
+        <CalendarDays size={14} aria-hidden="true" />
+        Minutos sin luz por día
+      </p>
       <MiniBars
         bars={dayBars}
         labelEvery={labelEvery}
@@ -248,8 +300,9 @@ function DeviceStatsCard({ d, range }: { d: DeviceStat; range: RangeKey }) {
       />
 
       <p className="chart-title">
+        <Activity size={14} aria-hidden="true" />
         Probabilidad de corte por día de la semana
-        <span className="muted"> · {d.patterns.observedDays} días observados</span>
+        <span className="faint"> · {d.patterns.observedDays} días observados</span>
       </p>
       <MiniBars bars={wdBars} hue="var(--off)" valueLabel={(v) => `${v}%`} />
       {peakWd && peakWd.probability > 0 && (
@@ -259,7 +312,10 @@ function DeviceStatsCard({ d, range }: { d: DeviceStat; range: RangeKey }) {
         </p>
       )}
 
-      <p className="chart-title">Cortes por hora del día</p>
+      <p className="chart-title">
+        <Clock3 size={14} aria-hidden="true" />
+        Cortes por hora del día
+      </p>
       <MiniBars bars={hourBars} labelEvery={1} valueLabel={(v) => String(v)} />
 
       {d.patterns.observedDays < 14 && (

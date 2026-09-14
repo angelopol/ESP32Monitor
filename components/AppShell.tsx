@@ -1,6 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  BarChart3,
+  Download,
+  LogOut,
+  Plus,
+  PlugZap,
+  Wifi,
+  WifiOff,
+  Zap,
+} from "lucide-react";
 import NotificationButton from "./NotificationButton";
 import DeviceCard, { type Device } from "./DeviceCard";
 import StatsView from "./StatsView";
@@ -25,6 +35,7 @@ export default function AppShell({
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
   const [standalone, setStandalone] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
   const origin = useRef("");
 
   useEffect(() => {
@@ -59,6 +70,7 @@ export default function AppShell({
   }, [load]);
 
   const logout = async () => {
+    setLoggingOut(true);
     await fetch("/api/auth/logout", { method: "POST" });
     onLogout();
   };
@@ -81,11 +93,17 @@ export default function AppShell({
   return (
     <main className="wrap">
       <header className="app-head">
-        <div>
-          <h1 className="title">Monitor de Luz</h1>
-          <span className="muted">{user.email}</span>
-        </div>
-        <button className="sm ghost" onClick={logout}>
+        <span className="brand">
+          <span className="brand-mark">
+            <Zap size={17} strokeWidth={2.5} fill="currentColor" />
+          </span>
+          <span className="identity">
+            <h1 className="title">Monitor de Luz</h1>
+            <span className="email">{user.email}</span>
+          </span>
+        </span>
+        <button className="sm ghost" onClick={logout} disabled={loggingOut}>
+          <LogOut size={16} />
           Salir
         </button>
       </header>
@@ -94,40 +112,60 @@ export default function AppShell({
         <NotificationButton />
       </div>
 
-      <div className="seg">
+      {!standalone && (
+        <p className="hint">
+          <Download size={16} aria-hidden="true" />
+          Instalá la app (menú del navegador →{" "}
+          <b>Agregar a pantalla de inicio</b>) para recibir avisos con la app
+          cerrada.
+        </p>
+      )}
+
+      <nav className="seg" aria-label="Secciones">
         <button
           className={view === "devices" ? "seg-btn active" : "seg-btn"}
           onClick={() => setView("devices")}
+          aria-current={view === "devices"}
         >
+          <Wifi size={15} />
           Dispositivos
         </button>
         <button
           className={view === "stats" ? "seg-btn active" : "seg-btn"}
           onClick={() => setView("stats")}
+          aria-current={view === "stats"}
         >
+          <BarChart3 size={15} />
           Estadísticas
         </button>
-      </div>
+      </nav>
 
       {view === "stats" ? (
         <StatsView />
       ) : (
         <>
-          {!standalone && (
-            <p className="hint">
-              Instalá la app (menú del navegador →{" "}
-              <b>Agregar a pantalla de inicio</b>) para recibir avisos con la app
-              cerrada.
+          {error && (
+            <p className="err" role="alert">
+              <WifiOff size={16} />
+              Sin conexión al servidor.
             </p>
           )}
 
-          {error && <p className="err">Sin conexión al servidor.</p>}
-
           {devices?.length === 0 && (
-            <p className="hint">
-              Todavía no tenés dispositivos. Creá uno o pedile a alguien que te
-              comparta el suyo con este correo.
-            </p>
+            <div className="empty-state">
+              <PlugZap aria-hidden="true" />
+              <p>
+                Todavía no tenés dispositivos. Creá uno o pedile a alguien que
+                te comparta el suyo con este correo.
+              </p>
+            </div>
+          )}
+
+          {devices === null && !error && (
+            <>
+              <div className="skeleton skeleton-card" aria-hidden="true" />
+              <div className="skeleton skeleton-card" aria-hidden="true" />
+            </>
           )}
 
           <div className="devices">
@@ -143,11 +181,13 @@ export default function AppShell({
 
           {adding ? (
             <form className="card add-form" onSubmit={createDevice}>
-              <label>
+              <label htmlFor="new-device-name">
                 Nombre del dispositivo{" "}
-                <span className="muted">(ej. Casa, Oficina)</span>
+                <span className="faint">(ej. Casa, Oficina)</span>
                 <input
+                  id="new-device-name"
                   autoFocus
+                  autoComplete="off"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   required
@@ -167,14 +207,16 @@ export default function AppShell({
               </div>
             </form>
           ) : (
-            <button className="sm" onClick={() => setAdding(true)}>
-              + Agregar dispositivo
+            <button className="sm block" onClick={() => setAdding(true)}>
+              <Plus size={16} />
+              Agregar dispositivo
             </button>
           )}
         </>
       )}
 
       <footer>
+        <Zap size={13} aria-hidden="true" />
         Cada dispositivo es una ubicación. El ESP32 hace ping con su token; si
         deja de responder más que el umbral, te llega “No hay luz en …”.
       </footer>

@@ -1,6 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import {
+  Bell,
+  BellOff,
+  BellRing,
+  Loader2,
+  TriangleAlert,
+} from "lucide-react";
 
 type NotifState = "loading" | "unsupported" | "denied" | "off" | "on";
 
@@ -117,61 +124,83 @@ export default function NotificationButton() {
     }
   }, []);
 
-  return (
-    <div className="notif">
-      {state === "loading" && <span className="muted">…</span>}
+  if (state === "loading") {
+    return (
+      <div className="notif-row">
+        <Loader2 size={16} className="spin" aria-hidden="true" />
+        <span>Revisando notificaciones…</span>
+      </div>
+    );
+  }
 
-      {state === "unsupported" && (
-        <span className="muted">
-          Este navegador no soporta notificaciones push.
-        </span>
-      )}
+  if (state === "unsupported") {
+    return (
+      <div className="notif-row">
+        <BellOff size={16} aria-hidden="true" />
+        <span>Este navegador no soporta notificaciones push.</span>
+      </div>
+    );
+  }
 
-      {state === "denied" && (
-        <div className="notif-denied">
-          <span className="muted">
+  if (state === "denied") {
+    return (
+      <div className="banner banner-warn" role="alert">
+        <TriangleAlert size={18} aria-hidden="true" />
+        <div className="banner-body">
+          <span>
             Las notificaciones están <b>bloqueadas</b> para este sitio.
             Desbloquealas y después tocá “Reintentar”:
           </span>
-          <ul className="muted">
+          <ul>
             <li>
-              Navegador: tocá el candado 🔒 (o la ⓘ) junto a la dirección →
-              <b> Permisos</b> → <b>Notificaciones</b> → <b>Permitir</b>.
+              Navegador: tocá el candado junto a la dirección → Permisos →
+              Notificaciones → Permitir.
             </li>
             <li>
-              App instalada: Ajustes del teléfono → <b>Apps</b> → Monitor de Luz
-              → <b>Notificaciones</b> → activar.
+              App instalada: Ajustes del teléfono → Apps → Monitor de Luz →
+              Notificaciones → activar.
             </li>
           </ul>
           <div className="btns-row">
             <button className="sm primary" onClick={enable} disabled={busy}>
+              {busy && <Loader2 size={15} className="spin" aria-hidden="true" />}
               Reintentar
             </button>
             <button className="sm ghost" onClick={refresh} disabled={busy}>
               Ya lo desbloqueé
             </button>
           </div>
+          {msg && <span className="faint">{msg}</span>}
         </div>
-      )}
+      </div>
+    );
+  }
 
+  return (
+    <div className="notif">
       {state === "off" && (
         <button className="primary sm" onClick={enable} disabled={busy}>
+          {busy ? <Loader2 size={16} className="spin" /> : <Bell size={16} />}
           Activar notificaciones
         </button>
       )}
 
       {state === "on" && (
         <>
+          <span className="notif-row on">
+            <BellRing size={16} aria-hidden="true" />
+            <span>Notificaciones activas</span>
+          </span>
           <button className="sm" onClick={test}>
             Probar
           </button>
           <button className="sm ghost" onClick={disable} disabled={busy}>
-            Desactivar avisos
+            Desactivar
           </button>
         </>
       )}
 
-      {msg && <span className="muted">{msg}</span>}
+      {msg && <span className="faint">{msg}</span>}
     </div>
   );
 }
