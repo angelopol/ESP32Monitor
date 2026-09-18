@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     if (await getDevice(deviceId)) await addMember(deviceId, user.id);
   }
 
-  const token = await createSession(user.id, remember);
+  const token = await createSession(user.id, remember, user);
   const res = NextResponse.json({ ok: true, user }, { headers: NO_STORE });
   res.cookies.set(sessionCookie(token, remember));
   return res;

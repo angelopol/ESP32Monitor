@@ -68,13 +68,33 @@ export default function AppShell({
     }
   }, []);
 
+  // Sondeo cada 20 s, y solo mientras la pestaña/app está visible: en
+  // segundo plano (PWA minimizada, otra pestaña) se detiene del todo para no
+  // gastar comandos de Redis sin que nadie esté mirando la pantalla.
   useEffect(() => {
     load();
-    const id = setInterval(load, 5000);
-    const onVis = () => document.visibilityState === "visible" && load();
+    let id: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (id == null) id = setInterval(load, 20000);
+    };
+    const stop = () => {
+      if (id != null) {
+        clearInterval(id);
+        id = null;
+      }
+    };
+    const onVis = () => {
+      if (document.visibilityState === "visible") {
+        load();
+        start();
+      } else {
+        stop();
+      }
+    };
+    start();
     document.addEventListener("visibilitychange", onVis);
     return () => {
-      clearInterval(id);
+      stop();
       document.removeEventListener("visibilitychange", onVis);
     };
   }, [load]);

@@ -47,20 +47,35 @@ export async function verifyPassword(
 interface SessionRecord {
   uid: string;
   remember: boolean;
+  // Snapshot del usuario al momento de loguearse: evita un GET aparte a
+  // `user:<id>` en cada request autenticado (el email/createdAt no cambian
+  // nunca post-registro, no hay endpoint que los edite).
+  email?: string;
+  createdAt?: number;
+  refreshedAt?: number;
 }
 
 export interface Session {
   token: string;
   userId: string;
   remember: boolean;
+  user?: User;
+  refreshedAt: number;
 }
 
 export async function createSession(
   userId: string,
   remember: boolean,
+  user?: User,
 ): Promise<string> {
   const token = newToken(32);
-  const rec: SessionRecord = { uid: userId, remember };
+  const rec: SessionRecord = {
+    uid: userId,
+    remember,
+    email: user?.email,
+    createdAt: user?.createdAt,
+    refreshedAt: Date.now(),
+  };
   await kv.set(`session:${token}`, JSON.stringify(rec), {
     ex: remember ? TTL_LONG : TTL_SHORT,
   });
@@ -78,25 +93,52 @@ export async function getSession(req: NextRequest): Promise<Session | null> {
   if (!raw) return null;
   try {
     const rec = JSON.parse(raw) as SessionRecord;
-    if (rec?.uid) return { token, userId: rec.uid, remember: rec.remember !== false };
+    if (rec?.uid) {
+      return {
+        token,
+        userId: rec.uid,
+        remember: rec.remember !== false,
+        refreshedAt: rec.refreshedAt ?? 0,
+        user:
+          rec.email && rec.createdAt
+            ? { id: rec.uid, email: rec.email, createdAt: rec.createdAt }
+            : undefined,
+      };
+    }
   } catch {
     // compat: sesiones viejas guardaban el userId como string plano
-    if (raw && !raw.startsWith("{")) return { token, userId: raw, remember: true };
+    if (raw && !raw.startsWith("{"))
+      return { token, userId: raw, remember: true, refreshedAt: 0 };
   }
   return null;
 }
 
-/** Renueva el TTL de la sesion en Redis (sliding expiration). */
-export async function refreshSession(s: Session): Promise<void> {
-  const rec: SessionRecord = { uid: s.userId, remember: s.remember };
+// No hace falta re-escribir el TTL en cada request: alcanza con renovarlo
+// como mucho 1 vez por dia para que una sesion activa nunca expire.
+const REFRESH_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/** Renueva el TTL de la sesion en Redis (sliding expiration), salvo que ya
+ *  se haya renovado hace poco. Devuelve si efectivamente escribio. */
+export async function refreshSession(s: Session): Promise<boolean> {
+  if (Date.now() - s.refreshedAt < REFRESH_MIN_INTERVAL_MS) return false;
+  const rec: SessionRecord = {
+    uid: s.userId,
+    remember: s.remember,
+    email: s.user?.email,
+    createdAt: s.user?.createdAt,
+    refreshedAt: Date.now(),
+  };
   await kv.set(`session:${s.token}`, JSON.stringify(rec), {
     ex: s.remember ? TTL_LONG : TTL_SHORT,
   });
+  return true;
 }
 
 export async function getCurrentUser(req: NextRequest): Promise<User | null> {
   const s = await getSession(req);
   if (!s) return null;
+  if (s.user) return s.user;
+  // Compat: sesiones creadas antes de guardar el snapshot del usuario.
   return getUserById(s.userId);
 }
 

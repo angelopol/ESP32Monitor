@@ -124,7 +124,20 @@ export async function evaluateAndNotify(
  * ejecute como mucho ~1 vez cada 10 s aunque lo disparen muchos requests.
  * Pensado para llamarse en segundo plano (`after(() => maybeSweep())`).
  */
+const SWEEP_LOCK_MS = 10_000;
+// Guarda local (por instancia tibia) de cuando se intento el lock por
+// ultima vez. El ESP32 pinguea cada 5 s y cada /api/devices/status tambien
+// dispara este maybeSweep, asi que sin esto se manda 1 SET a Redis por cada
+// llamada aunque el lock casi siempre vaya a fallar. El lock real sigue
+// siendo el de Redis (unica fuente de verdad entre instancias); esto solo
+// evita el viaje a Redis cuando ya sabemos, localmente, que es casi seguro
+// que fallaria.
+let lastSweepAttempt = 0;
+
 export async function maybeSweep(reason: Trigger = "check"): Promise<void> {
+  const now = Date.now();
+  if (now - lastSweepAttempt < SWEEP_LOCK_MS) return;
+  lastSweepAttempt = now;
   try {
     const got = await kv.set("power:sweep", "1", { nx: true, ex: 10 });
     if (!got) return;

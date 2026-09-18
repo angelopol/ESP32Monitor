@@ -79,9 +79,30 @@ export async function getDeviceIdByToken(token: string): Promise<string | null> 
   return kv.get(tokenKey(token));
 }
 
+// El ESP32 pinguea cada 5 s siempre con el mismo token: cachear la
+// resolucion token->device (en memoria, por instancia tibia de la funcion)
+// evita 2 comandos de Redis en la gran mayoria de esos pings. `invalidateTokenCache`
+// se llama al editar/borrar el dispositivo para que un cambio se vea al toque.
+const TOKEN_CACHE_TTL_MS = 30_000;
+const tokenCache = new Map<string, { device: Device; expiresAt: number }>();
+
+function invalidateTokenCache(token: string) {
+  tokenCache.delete(token);
+}
+
 export async function getDeviceByToken(token: string): Promise<Device | null> {
+  if (!token) return null;
+  const cached = tokenCache.get(token);
+  if (cached && cached.expiresAt > Date.now()) return cached.device;
+
   const id = await getDeviceIdByToken(token);
-  return id ? getDevice(id) : null;
+  const device = id ? await getDevice(id) : null;
+  if (device) {
+    tokenCache.set(token, { device, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS });
+  } else {
+    tokenCache.delete(token);
+  }
+  return device;
 }
 
 export async function getMembers(deviceId: string): Promise<string[]> {
@@ -131,6 +152,7 @@ export async function updateDevice(
   if (patch.thresholdSeconds !== undefined)
     device.thresholdSeconds = normalizeThreshold(patch.thresholdSeconds);
   await kv.set(deviceKey(id), JSON.stringify(device));
+  invalidateTokenCache(device.token);
   return device;
 }
 
@@ -149,6 +171,7 @@ export async function deleteDevice(id: string): Promise<void> {
     `device:${id}:history`,
   );
   await kv.srem(ALL, id);
+  invalidateTokenCache(device.token);
 }
 
 export interface DeviceWithStatus {

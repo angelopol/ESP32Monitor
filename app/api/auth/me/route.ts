@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   const session = await getSession(req);
   if (!session) return unauthorized();
 
-  const user = await getUserById(session.userId);
+  const user = session.user ?? (await getUserById(session.userId));
   if (!user) return unauthorized();
 
   // Renueva la sesion (sliding): un usuario activo no se desloguea.

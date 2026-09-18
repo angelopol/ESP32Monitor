@@ -21,11 +21,9 @@ export async function POST(req: NextRequest) {
     stored != null && (await verifyPassword(body.password, stored.passwordHash));
   if (!ok || !stored) return jsonError("Correo o contraseña incorrectos", 401);
 
-  const token = await createSession(stored.id, remember);
-  const res = NextResponse.json(
-    { ok: true, user: { id: stored.id, email: stored.email, createdAt: stored.createdAt } },
-    { headers: NO_STORE },
-  );
+  const user = { id: stored.id, email: stored.email, createdAt: stored.createdAt };
+  const token = await createSession(stored.id, remember, user);
+  const res = NextResponse.json({ ok: true, user }, { headers: NO_STORE });
   res.cookies.set(sessionCookie(token, remember));
   return res;
 }
