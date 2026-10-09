@@ -18,10 +18,22 @@ export default function Modal({
   children: React.ReactNode;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
+      if (e.key === "Tab") {
+        const elements = panelRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], summary, [tabindex="0"]');
+        if (!elements?.length) return;
+        const first = elements[0];
+        const last = elements[elements.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
     };
     document.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
@@ -30,12 +42,14 @@ export default function Modal({
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
+      previouslyFocused?.focus();
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
+        ref={panelRef}
         className="modal-panel"
         role="dialog"
         aria-modal="true"

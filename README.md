@@ -133,6 +133,17 @@ depende de él (ver *"Por qué está diseñado así"*).
 5. Abrí `ESP32Monitor/ESP32Monitor.ino` en el Arduino IDE (core de ESP32) y subilo
    por USB. En el monitor serie (115200) verás `[ping] 200` y `[ota] listo`.
 
+**Configurar sin recompilar (portal WiFi):** `secrets.h` solo pone los valores
+por defecto. Si el equipo no tiene WiFi configurado, no logra conectarse durante
+~30 s, o conecta pero el servidor no responde por 3 min, levanta un punto de
+acceso abierto **`ESP32Monitor-XXXX`**. Conectate desde el teléfono: se abre
+sola la página de configuración (si no, entrá a `http://192.168.4.1`). Ahí podés
+elegir la red WiFi, cambiar la URL del servidor, el token, el intervalo de ping,
+el hostname y la clave OTA. Con el equipo ya en tu red, la misma página está en
+**`http://esp32monitor.local`** (o en su IP). Las claves y el token no se
+muestran nunca: dejar el campo vacío mantiene el valor actual. **Restablecer**
+borra lo guardado y vuelve a los valores de `secrets.h`.
+
 **Actualizar el firmware ya instalado (sin cable):** con la PC en la misma red,
 en el Arduino IDE aparece un puerto de red `esp32monitor at x.x.x.x` — elegilo,
 subí, y te pide la `OTA_PASSWORD`. El firmware además **se reinicia solo** si pasa

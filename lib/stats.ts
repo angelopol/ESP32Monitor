@@ -127,7 +127,7 @@ export function localHour(ms: number, tz: string): number {
   return shifted(ms, tz).getUTCHours();
 }
 
-function dayStartMs(dateKey: string, tz: string): number {
+export function dayStartMs(dateKey: string, tz: string): number {
   const guess = Date.parse(`${dateKey}T00:00:00.000Z`);
   return guess - tzOffsetMs(guess, tz);
 }
@@ -235,6 +235,8 @@ export function patterns(
 // ------------------------- por dispositivo -------------------------
 
 export interface DeviceStats {
+  outages: Interval[];
+  observedFrom: number | null;
   current: WindowMetrics & { byDay: DayBucket[] };
   previous: WindowMetrics;
   patterns: Patterns;
@@ -249,6 +251,8 @@ export function computeDeviceStats(
   const intervals = buildOutages(events, now);
   const span = RANGE_MS[range];
   return {
+    outages: intervals,
+    observedFrom: events.length ? Math.min(...events.map((e) => e.at)) : null,
     current: {
       ...windowMetrics(intervals, now - span, now),
       byDay: byDay(intervals, now - span, now, tz),

@@ -2,6 +2,12 @@
 const nextConfig = {
   // Hay otros lockfiles arriba en el arbol de carpetas; fijamos la raiz aca.
   outputFileTracingRoot: import.meta.dirname,
+  webpack(config) {
+    // Keep imports inside the project's dependency junction for module lookup.
+    config.resolve.symlinks = false;
+    config.resolveLoader.symlinks = false;
+    return config;
+  },
   async headers() {
     return [
       {

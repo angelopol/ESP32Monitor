@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   CalendarDays,
@@ -14,6 +14,8 @@ import {
   ZapOff,
 } from "lucide-react";
 import MiniBars, { type Bar } from "./MiniBars";
+import OutageCalendar from "./OutageCalendar";
+import type { CalendarDevice } from "@/lib/outageCalendar";
 
 type RangeKey = "day" | "week" | "month" | "quarter" | "year";
 
@@ -41,7 +43,7 @@ interface WindowMetrics {
   mttrMs: number;
   currentlyOut: boolean;
 }
-interface DeviceStat {
+interface DeviceStat extends CalendarDevice {
   id: string;
   name: string;
   events: number;
@@ -60,6 +62,8 @@ interface DeviceStat {
   };
 }
 interface StatsResponse {
+  tz: string;
+  to: string;
   range: RangeKey;
   devices: DeviceStat[];
   ranking: {
@@ -95,7 +99,7 @@ const pct = (x: number) => `${(x * 100).toFixed(x > 0.999 ? 2 : 1)}%`;
 
 function Delta({ cur, prev, range }: { cur: number; prev: number; range: RangeKey }) {
   const diff = cur - prev;
-  if (prev === 0 && cur === 0)
+  if (diff === 0)
     return <span className="delta flat">sin cambios vs {PREV_LABEL[range]}</span>;
   const up = diff > 0;
   return (
@@ -111,23 +115,28 @@ export default function StatsView() {
   const [data, setData] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const request = useRef<AbortController | null>(null);
 
   const load = useCallback(async (r: RangeKey) => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
     setLoading(true);
     try {
-      const res = await fetch(`/api/stats?range=${r}`, { cache: "no-store" });
+      const res = await fetch(`/api/stats?range=${r}`, { cache: "no-store", signal: controller.signal });
       if (!res.ok) throw new Error(String(res.status));
       setData((await res.json()) as StatsResponse);
       setError(false);
     } catch {
-      setError(true);
+      if (!controller.signal.aborted) setError(true);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     load(range);
+    return () => request.current?.abort();
   }, [range, load]);
 
   const nameOf = (id?: string) =>
@@ -135,11 +144,15 @@ export default function StatsView() {
 
   return (
     <div className="stats">
+      <div className="report-heading"><div><h1>Reportes de energía</h1><p className="muted">Encuentra los cortes y entiende tus patrones.</p></div><button className="sm chip" disabled={loading} onClick={() => load(range)}>{loading ? "Cargando…" : "Actualizar"}</button></div>
+      {data && data.devices.length > 0 && <OutageCalendar devices={data.devices} tz={data.tz} now={Date.parse(data.to)} />}
+      <div><h2 className="report-subtitle">Resumen del período</h2><p className="faint">Últimos días hasta ahora. El calendario consulta todo el historial disponible.</p></div>
       <div className="range-row">
         {(Object.keys(RANGE_LABEL) as RangeKey[]).map((r) => (
           <button
             key={r}
             className={r === range ? "sm chip active" : "sm chip"}
+            aria-pressed={r === range}
             onClick={() => setRange(r)}
           >
             {RANGE_LABEL[r]}
@@ -150,7 +163,7 @@ export default function StatsView() {
       {error && (
         <p className="err" role="alert">
           <ZapOff size={16} />
-          No se pudieron cargar las estadísticas.
+          No se pudieron cargar las estadísticas. Usa Actualizar para reintentar.{data ? " Se muestran los últimos datos cargados." : ""}
         </p>
       )}
       {loading && !data && (
@@ -174,14 +187,14 @@ export default function StatsView() {
               <span className="tile-head">
                 <ZapOff size={15} />
                 <span className="tile-k">
-                  Sin luz ({RANGE_LABEL[range].toLowerCase()})
+                  Sin luz ({RANGE_LABEL[data.range].toLowerCase()})
                 </span>
               </span>
               <span className="tile-v">{fmtDur(data.totals.outageMs)}</span>
               <Delta
                 cur={data.totals.outageMs}
                 prev={data.totals.prevOutageMs}
-                range={range}
+                range={data.range}
               />
             </div>
             <div className="tile">
@@ -191,7 +204,7 @@ export default function StatsView() {
               </span>
               <span className="tile-v">{data.totals.outageCount}</span>
               <span className="delta flat">
-                {data.totals.prevOutageCount} en {PREV_LABEL[range]}
+                {data.totals.prevOutageCount} en {PREV_LABEL[data.range]}
               </span>
             </div>
             <div className="tile">
@@ -234,7 +247,7 @@ export default function StatsView() {
           )}
 
           {data.devices.map((d) => (
-            <DeviceStatsCard key={d.id} d={d} range={range} />
+            <DeviceStatsCard key={d.id} d={d} range={data.range} />
           ))}
         </>
       )}
@@ -289,6 +302,8 @@ function DeviceStatsCard({ d, range }: { d: DeviceStat; range: RangeKey }) {
         <span>recuperación media {fmtDur(d.current.mttrMs)}</span>
       </div>
 
+      <details className="pattern-details">
+      <summary>Explorar tendencias y patrones</summary>
       <p className="chart-title">
         <CalendarDays size={14} aria-hidden="true" />
         Minutos sin luz por día
@@ -323,6 +338,7 @@ function DeviceStatsCard({ d, range }: { d: DeviceStat; range: RangeKey }) {
           Pocos datos aún: las probabilidades se afinan con las semanas.
         </p>
       )}
+      </details>
     </div>
   );
 }

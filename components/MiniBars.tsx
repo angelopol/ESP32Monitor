@@ -30,17 +30,19 @@ export default function MiniBars({
   const H = height;
   const padB = 16; // espacio para etiquetas del eje x
   const padT = 12; // espacio para la etiqueta directa
-  const slot = W / n;
+  const slot = W / Math.max(1, n);
   const barW = Math.max(2, Math.min(slot - 2, 14));
   const plotH = H - padB - padT;
   const maxIdx = bars.reduce((mi, b, i) => (b.value > bars[mi].value ? i : mi), 0);
 
   return (
+    <div className="chart-accessible">
     <svg
       className="minibars"
       viewBox={`0 0 ${W} ${H}`}
       preserveAspectRatio="none"
       role="img"
+      aria-label={bars.length ? `Gráfico de ${bars.length} valores. Abre Ver datos para consultar el detalle.` : "Sin datos"}
     >
       {/* linea base */}
       <line
@@ -97,5 +99,10 @@ export default function MiniBars({
         );
       })}
     </svg>
+    <details className="chart-data">
+      <summary>Ver datos</summary>
+      <ul>{bars.map((bar, i) => <li key={i}>{bar.tip}</li>)}</ul>
+    </details>
+    </div>
   );
 }

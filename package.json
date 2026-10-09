@@ -4,9 +4,10 @@
   "version": "1.0.0",
   "description": "PWA que avisa cuando se corta la electricidad usando un ESP32 que hace ping a un servidor en Vercel.",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "test": "node --test tests/*.test.mjs",
+    "dev": "node --preserve-symlinks scripts/next.mjs dev",
+    "build": "node --preserve-symlinks scripts/next.mjs build",
+    "start": "node --preserve-symlinks scripts/next.mjs start",
     "lint": "next lint",
     "vapid": "node scripts/gen-vapid.mjs",
     "icons": "node scripts/gen-icons.mjs"
