@@ -110,7 +110,7 @@ SET_LOOP_TASK_STACK_SIZE(16 * 1024);
 // ----------------------------- CONFIGURACION ---------------------------------
 // Subi este numero en cada cambio: al arrancar lo imprime, asi confirmas que la
 // actualizacion (OTA o USB) entro.
-#define FW_VERSION 4
+#define FW_VERSION 5
 
 // LED de estado. APAGADO por defecto: en ESP32-C3 el GPIO2 es strapping pin de
 // arranque y moverlo puede impedir el boot; en ESP8266 el LED_BUILTIN suele
@@ -612,6 +612,42 @@ void handleRoot() {
   sendPage(200, p);
 }
 
+// Estado consultado directamente al equipo en la red local. Una respuesta
+// HTTP confirma que el firmware esta activo; serverReachable indica si el
+// servidor respondio recientemente a un ping (con cualquier codigo HTTP).
+void handleStatus() {
+  const unsigned long now = millis();
+  const bool wifiConnected = WiFi.status() == WL_CONNECTED;
+  const bool serverReachable = wifiConnected && pingOk > 0 &&
+                               now - lastOkMs < AP_NO_INTERNET_MS;
+
+  server.sendHeader("Cache-Control", "no-store");
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  if (server.arg("format") == "plain") {
+    server.send(200, "text/plain; charset=utf-8", "ON");
+    return;
+  }
+
+  String json;
+  json.reserve(220);
+  json += F("{\"ok\":true,\"power\":true,\"wifiConnected\":");
+  json += wifiConnected ? F("true") : F("false");
+  json += F(",\"serverReachable\":");
+  json += serverReachable ? F("true") : F("false");
+  json += F(",\"lastServerResponseSeconds\":");
+  if (pingOk) json += String((now - lastOkMs) / 1000);
+  else json += F("null");
+  json += F(",\"rssi\":");
+  if (wifiConnected) json += String(WiFi.RSSI());
+  else json += F("null");
+  json += F(",\"uptimeSeconds\":");
+  json += String(now / 1000);
+  json += F(",\"freeHeapBytes\":");
+  json += String(ESP.getFreeHeap());
+  json += '}';
+  server.send(200, "application/json; charset=utf-8", json);
+}
+
 void handleScan() {
   touchPortal();
   int n = WiFi.scanComplete();
@@ -728,6 +764,7 @@ void handleNotFound() {
 
 void setupWebServer() {
   server.on("/", HTTP_GET, handleRoot);
+  server.on("/api/status", HTTP_GET, handleStatus);
   server.on("/scan", HTTP_GET, handleScan);
   server.on("/save", HTTP_POST, handleSave);
   server.on("/restart", HTTP_POST, handleRestart);

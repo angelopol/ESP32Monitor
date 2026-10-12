@@ -144,6 +144,15 @@ el hostname y la clave OTA. Con el equipo ya en tu red, la misma página está e
 muestran nunca: dejar el campo vacío mantiene el valor actual. **Restablecer**
 borra lo guardado y vuelve a los valores de `secrets.h`.
 
+**Consultar el estado directamente al equipo:** en la misma red local, abrí
+`http://esp32monitor.local/api/status` (o reemplazá el nombre por la IP del
+ESP8266). Devuelve JSON con `wifiConnected`, `serverReachable` (respuesta HTTP
+del servidor en los últimos 3 minutos), `lastServerResponseSeconds`, `rssi`,
+`uptimeSeconds` y `freeHeapBytes`. La respuesta del endpoint confirma que el
+equipo está encendido. `?format=plain` devuelve `ON` para clientes que solo
+necesitan una respuesta simple. La ruta `/api/status` de la app consulta el
+estado registrado en el servidor; esta ruta local consulta al equipo.
+
 **Actualizar el firmware ya instalado (sin cable):** con la PC en la misma red,
 en el Arduino IDE aparece un puerto de red `esp32monitor at x.x.x.x` — elegilo,
 subí, y te pide la `OTA_PASSWORD`. El firmware además **se reinicia solo** si pasa
